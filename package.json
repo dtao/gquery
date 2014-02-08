@@ -5,5 +5,8 @@
   "main": "gquery.js",
   "scripts": {
     "test": "autodoc -t gquery.js"
+  },
+  "dependencies": {
+    "lazy.js": ">= 0.3.2"
   }
 }

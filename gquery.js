@@ -1,3 +1,5 @@
+var Lazy = require('lazy.js');
+
 /**
  * @typedef {object} LocatorPart
  * @property {string} type One of ['id', 'class', 'name']
@@ -70,7 +72,7 @@ Context.prototype.findMatches = function findMatches(nodes, recursive, predicate
     nodes = context.getChildren(nodes);
   }
 
-  nodes.forEach(function(node) {
+  Lazy(nodes).each(function(node) {
     if (predicate(node)) {
       matches.push(node);
     }
@@ -137,7 +139,7 @@ Locator.prototype.find = function find(target) {
 
   var finalIndex = this.parts.length - 1;
 
-  this.parts.forEach(function(part, i) {
+  Lazy(this.parts).each(function(part, i) {
     var matches;
 
     switch (part.type) {
@@ -162,7 +164,7 @@ Locator.prototype.find = function find(target) {
 
     if (i != finalIndex) {
       result = [];
-      matches.forEach(function(match) {
+      Lazy(matches).each(function(match) {
         result.push.apply(result, context.getChildren(match));
       });
     } else {
