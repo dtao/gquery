@@ -62,17 +62,22 @@ Context.prototype.find = function find(selector, node) {
   return new Locator(selector, this).find(node);
 };
 
-Context.prototype.findMatches = function findMatches(nodes, predicate) {
-  var context  = this,
+Context.prototype.findMatches = function findMatches(nodes, recursive, predicate) {
+  var context = this,
       matches = [];
+
+  if (!(nodes instanceof Array)) {
+    nodes = context.getChildren(nodes);
+  }
 
   nodes.forEach(function(node) {
     if (predicate(node)) {
       matches.push(node);
     }
 
-    var children = context.getChildren(node);
-    matches.push.apply(matches, context.findMatches(children, predicate));
+    if (recursive) {
+      matches.push.apply(matches, context.findMatches(node, true, predicate));
+    }
   });
 
   return matches;
@@ -85,12 +90,13 @@ function Locator(selector, context) {
 
 /**
  * @example
- * var locator = new gQuery.Locator('#foo');
+ * var fooLocator   = new gQuery.Locator('#foo'),
+ *     childLocator = new gQuery.Locator('foo > bar');
  *
- * locator.find([{ id: 'bar' }, { id: 'foo' }]);
+ * fooLocator.find([{ id: 'bar' }, { id: 'foo' }]);
  * // => [{ id: 'foo' }]
  *
- * locator.find([
+ * fooLocator.find([
  *   { children: [] },
  *   { children: [{ id: 'bar' }] },
  *   {
@@ -101,31 +107,66 @@ function Locator(selector, context) {
  *   }
  * ]);
  * // => [{ id: 'foo', attribute: 'blah' }]
+ *
+ * childLocator.find([
+ *   {
+ *     name: 'foo',
+ *     children: [
+ *       { name: 'foo', x: 1 },
+ *       { name: 'bar', x: 2 },
+ *       {
+ *         children: [
+ *           { name: 'bar', x: 3 }
+ *         ]
+ *       }
+ *     ]
+ *   },
+ *   {
+ *     name: 'bar',
+ *     children: [
+ *       { name: 'foo', x: 4 }
+ *     ]
+ *   }
+ * ]);
+ * // => [{ name: 'bar', x: 2 }]
  */
 Locator.prototype.find = function find(target) {
   var context = this.context;
 
   var result = target instanceof Array ? target : [target];
 
-  this.parts.forEach(function(part) {
+  var finalIndex = this.parts.length - 1;
+
+  this.parts.forEach(function(part, i) {
+    var matches;
+
     switch (part.type) {
       case 'id':
-        result = context.findMatches(result, function(child) {
+        matches = context.findMatches(result, !part.direct, function(child) {
           return context.getId(child) === part.value;
         });
         break;
 
       case 'class':
-        result = context.findMatches(result, function(child) {
+        matches = context.findMatches(result, !part.direct, function(child) {
           return context.getClass(child) === part.value;
         });
         break;
 
       case 'name':
-        result = context.findMatches(result, function(child) {
+        matches = context.findMatches(result, !part.direct, function(child) {
           return context.getName(child) === part.value;
         });
         break;
+    }
+
+    if (i != finalIndex) {
+      result = [];
+      matches.forEach(function(match) {
+        result.push.apply(result, context.getChildren(match));
+      });
+    } else {
+      result = matches;
     }
   });
 
