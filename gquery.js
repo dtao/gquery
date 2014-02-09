@@ -44,10 +44,12 @@ var Errors = {
  * A collection of objects wrapped by gQuery.
  *
  * @param {Array.<*>} source The array of objects to include in the collection.
+ * @param {Adapter} adapter The adapter to use for {@link #find}, etc.
  * @constructor
  */
-function Collection(source) {
-  this.source = source;
+function Collection(source, adapter) {
+  this.source  = source  || [];
+  this.adapter = adapter || new Adapter();
 }
 
 Collection.prototype = new Lazy.ArrayLikeSequence();
@@ -92,6 +94,31 @@ Collection.prototype.prop = function prop(name, value) {
   });
 
   return this;
+};
+
+/**
+ * Finds all the matches for the given selector.
+ *
+ * @param {string} selector A selector like '#foo', '.bar', etc.
+ * @returns {Collection} A collection consisting of all the matches.
+ *
+ * @example
+ * var collection = new gQuery.Collection([
+ *   {
+ *     id: 'foo',
+ *     children: [
+ *       { 'class': 'bar', tag: 2 }
+ *     ],
+ *     tag: 1
+ *   },
+ *   { 'class': 'bar', tag: 3 }
+ * ]);
+ *
+ * collection.find('#foo').prop('tag');  // => 1
+ * collection.find('#foo').find('.bar'); // => collection: [{ 'class': 'bar', tag: 2 }]
+ */
+Collection.prototype.find = function find(selector) {
+  return new Locator(selector, this.adapter).find(this);
 };
 
 /**
@@ -148,7 +175,7 @@ Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate
   var adapter = this,
       matches = [];
 
-  if (!(nodes instanceof Array)) {
+  if (!(nodes instanceof Array || nodes instanceof Collection)) {
     nodes = adapter.getChildren(nodes);
   }
 
@@ -221,11 +248,9 @@ function Locator(selector, adapter) {
  * // => collection: [{ name: 'bar', x: 2 }]
  */
 Locator.prototype.find = function find(target) {
-  var adapter = this.adapter;
-
-  var result = target instanceof Array ? target : [target];
-
-  var finalIndex = this.parts.length - 1;
+  var adapter    = this.adapter,
+      result     = getCollection(target, adapter),
+      finalIndex = this.parts.length - 1;
 
   Lazy(this.parts).each(function(part, i) {
     switch (part.type) {
@@ -258,7 +283,7 @@ Locator.prototype.find = function find(target) {
     }
   });
 
-  return new Collection(result);
+  return new Collection(result, adapter);
 };
 
 /**
@@ -328,6 +353,18 @@ function parseSelector(selector) {
   }
 
   return parts;
+}
+
+function getCollection(source, adapter) {
+  if (source instanceof Collection) {
+    return source;
+  }
+
+  if (!(source instanceof Array)) {
+    source = [source];
+  }
+
+  return new Collection(source, adapter);
 }
 
 gQuery.Adapter    = Adapter;
