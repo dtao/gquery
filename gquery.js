@@ -175,17 +175,13 @@ Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate
   var adapter = this,
       matches = [];
 
-  if (!(nodes instanceof Array || nodes instanceof Collection)) {
-    nodes = adapter.getChildren(nodes);
-  }
-
   Lazy(nodes).each(function(node) {
     if (predicate(node)) {
       matches.push(node);
     }
 
     if (recursive) {
-      matches.push.apply(matches, adapter.findMatches(node, true, predicate));
+      matches.push.apply(matches, adapter.findMatches(adapter.getChildren(node), true, predicate));
     }
   });
 
