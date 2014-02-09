@@ -58,6 +58,10 @@ Collection.prototype.length = function length() {
   return this.source.length;
 };
 
+Collection.prototype.inspect = function inspect() {
+  return JSON.stringify(this.value(), null, 2);
+};
+
 /**
  * Either gets or sets the property with the specified name.
  *
