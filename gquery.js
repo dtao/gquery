@@ -40,6 +40,19 @@ var Errors = {
   INVALID_SELECTOR: 'Invalid selector'
 };
 
+/**
+ * The `Adapter` object is responsible for configuring how gQuery traverses a
+ * data structure. In particular it provides these overridable methods:
+ *
+ * - `getId` (for `'#foo'`-style selectors)
+ * - `getName` (for `'foo'`-style selectors)
+ * - `getClass` (for `'.foo'`-style selectors)
+ * - `getChildren` (to understand how to search the entire structure)
+ *
+ * @param {Object} context The object being wrapped.
+ * @param {Object} options Optional overrides for the methods listed above.
+ * @constructor
+ */
 function Adapter(context, options) {
   this.context = context || [];
 
@@ -98,6 +111,14 @@ Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate
   return matches;
 };
 
+/**
+ * The `Locator` object takes a selector and is responsible for applying that
+ * selector in order to search a data structure.
+ *
+ * @param {string} selector A selector like '#foo', '.bar', etc.
+ * @param {Adapter} adapter The adapter to use when searching.
+ * @constructor
+ */
 function Locator(selector, adapter) {
   this.parts   = parseSelector(selector);
   this.adapter = adapter || new Adapter();
