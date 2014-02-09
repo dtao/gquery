@@ -1,6 +1,6 @@
 {
   "name": "gquery",
-  "description": "Like jQuery for any generic collection",
+  "description": "Generic jQuery",
   "version": "0.1.0",
   "main": "gquery.js",
   "scripts": {
