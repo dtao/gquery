@@ -304,6 +304,7 @@ Locator.prototype.find = function find(target) {
 
 /**
  * @private
+ * @param {string} selector
  * @returns {Array.<LocatorPart>}
  *
  * @example
