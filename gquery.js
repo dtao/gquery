@@ -29,7 +29,7 @@ var Lazy = require('lazy.js');
  * $('baz > .bar');       // => collection: [{ 'class': 'bar', attr: 4 }]
  */
 function gQuery(context, options) {
-  var adapter = new Adapter(context, options || {});
+  var adapter = new Adapter(context || [], options || {});
 
   return function $(selector) {
     return adapter.find(selector);
@@ -86,7 +86,7 @@ Collection.prototype.length = function length() {
  */
 Collection.prototype.prop = function prop(name, value) {
   if (arguments.length === 1) {
-    return this.first()[name];
+    return (this.first() || {})[name];
   }
 
   this.each(function(e) {
@@ -201,7 +201,7 @@ Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate
  * @constructor
  */
 function Locator(selector, adapter) {
-  this.parts   = parseSelector(selector);
+  this.parts   = parseSelector(selector || '');
   this.adapter = adapter || new Adapter();
 }
 
