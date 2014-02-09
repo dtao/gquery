@@ -326,14 +326,30 @@ Locator.prototype.find = function find(target) {
  *   { type: 'class', direct: false, value: 'bar' },
  *   { type: 'name', direct: false, value: 'baz' }
  * ]
+ *
+ * parseSelector('#foo[bar="baz"]');
+ * // => [
+ *   {
+ *     type: 'id',
+ *     direct: false,
+ *     value: 'foo',
+ *     condition: {
+ *       type: 'equality',
+ *       property: 'bar',
+ *       value: 'baz'
+ *     }
+ *   }
+ * ]
  */
 function parseSelector(selector) {
-  var matcher = /[#\.]?(?:[\w\d\-]+|>)/g,
+  var matcher = /[#\.]?(?:[\w\d\-]+(?:\[[\w\d]+[=]".*"\])?|>)/g,
       match,
       value,
       parts = [],
+      part,
       type,
-      direct = false;
+      direct = false,
+      conditionMatch;
 
   while (match = matcher.exec(selector)) {
     value = match[0];
@@ -364,11 +380,25 @@ function parseSelector(selector) {
         break;
     }
 
-    parts.push({
+    part = {
       type: type,
       direct: direct,
       value: value
-    });
+    };
+
+    conditionMatch = value.match(/\[([\w\d]+)[=]"(.*)"\]/);
+    if (conditionMatch) {
+      part.value = part.value
+        .substring(0, conditionMatch.index);
+
+      part.condition = {
+        type: 'equality',
+        property: conditionMatch[1],
+        value: conditionMatch[2]
+      };
+    }
+
+    parts.push(part);
 
     direct = false;
   }
