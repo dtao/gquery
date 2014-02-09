@@ -7,17 +7,45 @@ var Lazy = require('lazy.js');
  * @property {string} value The id, class name, or name to look for
  */
 
+/**
+ * Wraps an object and provides jQuery-like query capabilities on that object.
+ *
+ * @example
+ * var $ = gQuery([
+ *   { 'id': 'foo', attr: 1 },
+ *   { 'class': 'bar', attr: 2 },
+ *   {
+ *     'name': 'baz',
+ *     'attr': 3,
+ *     'children': [
+ *       { 'class': 'bar', attr: 4 }
+ *     ]
+ *   }
+ * ]);
+ *
+ * $('#foo'); // => [{ id: 'foo', attr: 1 }]
+ */
 function gQuery(context, options) {
+  var adapter = new Adapter(context, options || {});
+
+  return function $(selector) {
+    return adapter.find(selector);
+  };
+}
+
+var Errors = {
+  INVALID_SELECTOR: 'Invalid selector'
+};
+
+function Adapter(context, options) {
+  this.context = context || [];
+
   options || (options = {});
 
-  context = new Context(context);
-
-  virtualMethod(context, options, 'getId');
-  virtualMethod(context, options, 'getName');
-  virtualMethod(context, options, 'getClass');
-  virtualMethod(context, options, 'getChildren');
-
-  return wrapContext(context);
+  virtualMethod(this, options, 'getId');
+  virtualMethod(this, options, 'getName');
+  virtualMethod(this, options, 'getClass');
+  virtualMethod(this, options, 'getChildren');
 }
 
 function virtualMethod(object, impl, name) {
@@ -26,50 +54,32 @@ function virtualMethod(object, impl, name) {
   }
 }
 
-function wrapContext(context) {
-  return function $(selector) {
-    return context.find(selector);
-  };
-}
-
-var Errors = {
-  INVALID_SELECTOR: 'Invalid selector'
-};
-
-function Context(context) {
-  this.context = context || [];
-}
-
-Context.prototype.getId = function getId(node) {
+Adapter.prototype.getId = function getId(node) {
   return node.id;
 };
 
-Context.prototype.getClass = function getClass(node) {
+Adapter.prototype.getClass = function getClass(node) {
   return node.class;
 };
 
-Context.prototype.getName = function getName(node) {
+Adapter.prototype.getName = function getName(node) {
   return node.name;
 };
 
-Context.prototype.getChildren = function getChildren(node) {
+Adapter.prototype.getChildren = function getChildren(node) {
   return node.children || [];
 };
 
-Context.prototype.find = function find(selector, node) {
-  if (selector instanceof gQuery.Node) {
-    return selector;
-  }
-
-  return new Locator(selector, this).find(node);
+Adapter.prototype.find = function find(selector) {
+  return new Locator(selector, this).find(this.context);
 };
 
-Context.prototype.findMatches = function findMatches(nodes, recursive, predicate) {
-  var context = this,
+Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate) {
+  var adapter = this,
       matches = [];
 
   if (!(nodes instanceof Array)) {
-    nodes = context.getChildren(nodes);
+    nodes = adapter.getChildren(nodes);
   }
 
   Lazy(nodes).each(function(node) {
@@ -78,16 +88,16 @@ Context.prototype.findMatches = function findMatches(nodes, recursive, predicate
     }
 
     if (recursive) {
-      matches.push.apply(matches, context.findMatches(node, true, predicate));
+      matches.push.apply(matches, adapter.findMatches(node, true, predicate));
     }
   });
 
   return matches;
 };
 
-function Locator(selector, context) {
+function Locator(selector, adapter) {
   this.parts   = parseSelector(selector);
-  this.context = context || new Context();
+  this.adapter = adapter || new Adapter();
 }
 
 /**
@@ -133,42 +143,40 @@ function Locator(selector, context) {
  * // => [{ name: 'bar', x: 2 }]
  */
 Locator.prototype.find = function find(target) {
-  var context = this.context;
+  var adapter = this.adapter;
 
   var result = target instanceof Array ? target : [target];
 
   var finalIndex = this.parts.length - 1;
 
   Lazy(this.parts).each(function(part, i) {
-    var matches;
-
     switch (part.type) {
       case 'id':
-        matches = context.findMatches(result, !part.direct, function(child) {
-          return context.getId(child) === part.value;
+        result = adapter.findMatches(result, !part.direct, function(child) {
+          return adapter.getId(child) === part.value;
         });
         break;
 
       case 'class':
-        matches = context.findMatches(result, !part.direct, function(child) {
-          return context.getClass(child) === part.value;
+        result = adapter.findMatches(result, !part.direct, function(child) {
+          return adapter.getClass(child) === part.value;
         });
         break;
 
       case 'name':
-        matches = context.findMatches(result, !part.direct, function(child) {
-          return context.getName(child) === part.value;
+        result = adapter.findMatches(result, !part.direct, function(child) {
+          return adapter.getName(child) === part.value;
         });
         break;
     }
 
     if (i != finalIndex) {
-      result = [];
-      Lazy(matches).each(function(match) {
-        result.push.apply(result, context.getChildren(match));
-      });
-    } else {
-      result = matches;
+      result = Lazy(result)
+        .map(function(match) {
+          return adapter.getChildren(match);
+        })
+        .flatten()
+        .toArray();
     }
   });
 
@@ -244,7 +252,7 @@ function parseSelector(selector) {
   return parts;
 }
 
-gQuery.Context = Context;
+gQuery.Adapter = Adapter;
 gQuery.Locator = Locator;
 
 module.exports = gQuery;
