@@ -135,16 +135,40 @@ function Adapter(context, options) {
 
   options || (options = {});
 
-  virtualMethod(this, options, 'getId');
-  virtualMethod(this, options, 'getName');
-  virtualMethod(this, options, 'getClass');
-  virtualMethod(this, options, 'getChildren');
+  overrideMethod(this, 'getId', options.id);
+  overrideMethod(this, 'getName', options.name);
+  overrideMethod(this, 'getClass', options.class);
+  overrideMethod(this, 'getChildren', options.children);
 }
 
-function virtualMethod(object, impl, name) {
-  if (typeof impl[name] === 'function') {
-    object[name] = impl[name];
+/**
+ * @private
+ * @param {Object} object
+ * @param {string} name
+ * @param {function(*):*|string} override
+ *
+ * @example
+ * var base = { foo: 'bar' };
+ *
+ * overrideMethod(base, 'foo', function(x) { return -x; })
+ *   .foo(5);
+ * // => -5
+ *
+ * overrideMethod(base, 'foo', 'baz')
+ *   .foo({ baz: 'blah' });
+ * // => 'blah'
+ */
+function overrideMethod(object, name, override) {
+  if (typeof override === 'function') {
+    object[name] = override;
+
+  } else if (typeof override === 'string') {
+    object[name] = function(node) {
+      return node[override];
+    };
   }
+
+  return object;
 }
 
 Adapter.prototype.getId = function getId(node) {
