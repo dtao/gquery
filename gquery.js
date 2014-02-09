@@ -23,7 +23,10 @@ var Lazy = require('lazy.js');
  *   }
  * ]);
  *
- * $('#foo'); // => [{ id: 'foo', attr: 1 }]
+ * $('#foo');        // => [{ id: 'foo', attr: 1 }]
+ * $('.bar');        // => [{ 'class': 'bar', attr: 2 }, { 'class': 'bar', attr: 4 }]
+ * $('baz')[0].attr; // => 3
+ * $('baz > .bar');  // => [{ 'class': 'bar', attr: 4 }]
  */
 function gQuery(context, options) {
   var adapter = new Adapter(context, options || {});
