@@ -36,10 +36,6 @@ function gQuery(context, options) {
   };
 }
 
-var Errors = {
-  INVALID_SELECTOR: 'Invalid selector'
-};
-
 /**
  * A collection of objects wrapped by gQuery.
  *
