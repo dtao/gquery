@@ -23,10 +23,10 @@ var Lazy = require('lazy.js');
  *   }
  * ]);
  *
- * $('#foo');        // => [{ id: 'foo', attr: 1 }]
- * $('.bar');        // => [{ 'class': 'bar', attr: 2 }, { 'class': 'bar', attr: 4 }]
- * $('baz')[0].attr; // => 3
- * $('baz > .bar');  // => [{ 'class': 'bar', attr: 4 }]
+ * $('#foo');             // => collection: [{ id: 'foo', attr: 1 }]
+ * $('.bar');             // => collection: [{ 'class': 'bar', attr: 2 }, { 'class': 'bar', attr: 4 }]
+ * $('baz').prop('attr'); // => 3
+ * $('baz > .bar');       // => collection: [{ 'class': 'bar', attr: 4 }]
  */
 function gQuery(context, options) {
   var adapter = new Adapter(context, options || {});
@@ -38,6 +38,60 @@ function gQuery(context, options) {
 
 var Errors = {
   INVALID_SELECTOR: 'Invalid selector'
+};
+
+/**
+ * A collection of objects wrapped by gQuery.
+ *
+ * @param {Array.<*>} source The array of objects to include in the collection.
+ * @constructor
+ */
+function Collection(source) {
+  this.source = source;
+}
+
+Collection.prototype = new Lazy.ArrayLikeSequence();
+
+Collection.prototype.get = function get(i) {
+  return this.source[i];
+};
+
+Collection.prototype.length = function length() {
+  return this.source.length;
+};
+
+/**
+ * Either gets or sets the property with the specified name.
+ *
+ * To *get* the property, only supply the first parameter ('name'). The return
+ * value will be retrieved from the first element in the collection.
+ *
+ * To *set* the property, supply both parameters ('name' and 'value'). The
+ * property will be set for every element in the collection.
+ *
+ * @param {string} name The name of the property to get/set.
+ * @param {*} value The value for the property.
+ * @returns {Collection} The collection.
+ *
+ * @example
+ * var collection = new gQuery.Collection([
+ *   { tag: 1 },
+ *   { tag: 2 }
+ * ]);
+ *
+ * collection.prop('tag');    // => 1
+ * collection.prop('tag', 3); // => collection: [{ tag: 3 }, { tag: 3 }]
+ */
+Collection.prototype.prop = function prop(name, value) {
+  if (arguments.length === 1) {
+    return this.first()[name];
+  }
+
+  this.each(function(e) {
+    e[name] = value;
+  });
+
+  return this;
 };
 
 /**
@@ -130,7 +184,7 @@ function Locator(selector, adapter) {
  *     childLocator = new gQuery.Locator('foo > bar');
  *
  * fooLocator.find([{ id: 'bar' }, { id: 'foo' }]);
- * // => [{ id: 'foo' }]
+ * // => collection: [{ id: 'foo' }]
  *
  * fooLocator.find([
  *   { children: [] },
@@ -142,7 +196,7 @@ function Locator(selector, adapter) {
  *     ]
  *   }
  * ]);
- * // => [{ id: 'foo', attribute: 'blah' }]
+ * // => collection: [{ id: 'foo', attribute: 'blah' }]
  *
  * childLocator.find([
  *   {
@@ -164,7 +218,7 @@ function Locator(selector, adapter) {
  *     ]
  *   }
  * ]);
- * // => [{ name: 'bar', x: 2 }]
+ * // => collection: [{ name: 'bar', x: 2 }]
  */
 Locator.prototype.find = function find(target) {
   var adapter = this.adapter;
@@ -204,7 +258,7 @@ Locator.prototype.find = function find(target) {
     }
   });
 
-  return result;
+  return new Collection(result);
 };
 
 /**
@@ -276,7 +330,8 @@ function parseSelector(selector) {
   return parts;
 }
 
-gQuery.Adapter = Adapter;
-gQuery.Locator = Locator;
+gQuery.Adapter    = Adapter;
+gQuery.Collection = Collection;
+gQuery.Locator    = Locator;
 
 module.exports = gQuery;
