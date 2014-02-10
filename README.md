@@ -16,12 +16,14 @@ var $ = gQuery([
     class: 'baz',
     tag: 3,
     children: [
-      { id: 'foo', tag: 4 }
+      { id: 'foo', tag: 4 },
+      ( class: 'bar', tag: 5 )
     ]
   }
 ]);
 
-$('#foo');        // => [{ id: 'foo', tag: 1 }, { id: 'foo', tag: 4 }]
-$('.bar');        // => [{ class: 'bar', tag: 2 }]
-$('.baz > #foo'); // => [{ id: 'foo', tag: 4 }]
+$('#foo');          // => [{ id: 'foo', tag: 1 }, { id: 'foo', tag: 4 }]
+$('.bar');          // => [{ class: 'bar', tag: 2 }]
+$('.baz > #foo');   // => [{ id: 'foo', tag: 4 }]
+$('.bar[tag="2"]'); // => [{ class: 'bar', tag: 2 }]
 ```

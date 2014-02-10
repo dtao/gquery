@@ -1,7 +1,7 @@
 var Lazy = require('lazy.js');
 
 /**
- * @typedef {object} LocatorPart
+ * @typedef {object} LocatorPartOptions
  * @property {string} type One of ['id', 'class', 'name']
  * @property {boolean} direct Whether this part represents a direct descendant
  * @property {string} value The id, class name, or name to look for
@@ -27,6 +27,7 @@ var Lazy = require('lazy.js');
  * $('.bar');             // => collection: [{ 'class': 'bar', attr: 2 }, { 'class': 'bar', attr: 4 }]
  * $('baz').prop('attr'); // => 3
  * $('baz > .bar');       // => collection: [{ 'class': 'bar', attr: 4 }]
+ * $('.bar[attr="4"]');   // => collection: [{ 'class': 'bar', attr: 4 }]
  */
 function gQuery(context, options) {
   var adapter = new Adapter(context || [], options || {});
@@ -221,8 +222,13 @@ Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate
  * @constructor
  */
 function Locator(selector, adapter) {
-  this.parts   = parseSelector(selector || '');
   this.adapter = adapter || new Adapter();
+
+  this.parts = Lazy(parseSelector(selector || ''))
+    .map(function(part) {
+      return new LocatorPart(adapter, part);
+    })
+    .toArray();
 }
 
 /**
@@ -273,25 +279,9 @@ Locator.prototype.find = function find(target) {
       finalIndex = this.parts.length - 1;
 
   Lazy(this.parts).each(function(part, i) {
-    switch (part.type) {
-      case 'id':
-        result = adapter.findMatches(result, !part.direct, function(child) {
-          return adapter.getId(child) === part.value;
-        });
-        break;
-
-      case 'class':
-        result = adapter.findMatches(result, !part.direct, function(child) {
-          return adapter.getClass(child) === part.value;
-        });
-        break;
-
-      case 'name':
-        result = adapter.findMatches(result, !part.direct, function(child) {
-          return adapter.getName(child) === part.value;
-        });
-        break;
-    }
+    result = adapter.findMatches(result, !part.direct, function(child) {
+      return part.matches(child);
+    });
 
     if (i != finalIndex) {
       result = Lazy(result)
@@ -307,6 +297,76 @@ Locator.prototype.find = function find(target) {
 };
 
 /**
+ * One part of a {@link Locator}.
+ *
+ * @param {Adapter} adapter
+ * @param {LocatorPartOptions} options
+ * @constructor
+ */
+function LocatorPart(adapter, options) {
+  options || (options = {});
+
+  this.adapter   = adapter;
+  this.source    = options.source;
+  this.type      = options.type || 'name';
+  this.direct    = options.direct || false;
+  this.value     = options.value || '';
+  this.condition = options.condition;
+  this.matches   = this.getPredicate();
+}
+
+LocatorPart.prototype.getPredicate = function getPredicate() {
+  var basePredicate = this.getBasePredicate(),
+      predicate     = basePredicate,
+      condition     = this.condition;
+
+  if (condition) {
+    predicate = this.applyCondition(condition, predicate);
+  }
+
+  return predicate;
+};
+
+LocatorPart.prototype.getBasePredicate = function getBasePredicate() {
+  var adapter = this.adapter,
+      type    = this.type,
+      value   = this.value;
+
+  switch (type) {
+    case 'id':
+      return function(node) {
+        return adapter.getId(node) === value;
+      };
+
+    case 'class':
+      return function(node) {
+        return adapter.getClass(node) === value;
+      };
+
+    case 'name':
+      return function(node) {
+        return adapter.getName(node) === value;
+      };
+  }
+};
+
+LocatorPart.prototype.applyCondition = function applyCondition(condition, predicate) {
+  switch (condition.type) {
+    case 'equality':
+      return function(node) {
+        if (!predicate(node)) { return false; }
+
+        // TODO: allow for non-string (e.g. numeric) matching as well
+        return String(node[condition.property]) === String(condition.value);
+      };
+
+    default:
+      throw 'Unknown condition type: "' + condition.type + '"! ' +
+        '(from selector: ' + this.source + ')';
+  }
+};
+
+/**
  * @private
  * @param {string} selector
  * @returns {Array.<LocatorPart>}
@@ -314,22 +374,23 @@ Locator.prototype.find = function find(target) {
  * @example
  * parseSelector('foo > bar');
  * // => [
- *   { type: 'name', direct: false, value: 'foo' },
- *   { type: 'name', direct: true, value: 'bar' }
+ *   { source: 'foo', type: 'name', direct: false, value: 'foo' },
+ *   { source: 'bar', type: 'name', direct: true, value: 'bar' }
  * ]
  *
  * parseSelector('foo > > bar'); // throws
  *
  * parseSelector('#foo .bar baz');
  * // => [
- *   { type: 'id', direct: false , value: 'foo' },
- *   { type: 'class', direct: false, value: 'bar' },
- *   { type: 'name', direct: false, value: 'baz' }
+ *   { source: '#foo', type: 'id', direct: false , value: 'foo' },
+ *   { source: '.bar', type: 'class', direct: false, value: 'bar' },
+ *   { source: 'baz', type: 'name', direct: false, value: 'baz' }
  * ]
  *
  * parseSelector('#foo[bar="baz"]');
  * // => [
  *   {
+ *     source: '#foo[bar="baz"]',
  *     type: 'id',
  *     direct: false,
  *     value: 'foo',
@@ -380,7 +441,8 @@ function parseSelector(selector) {
         break;
     }
 
-    part = {
+    partOptions = {
+      source: match[0],
       type: type,
       direct: direct,
       value: value
@@ -388,17 +450,17 @@ function parseSelector(selector) {
 
     conditionMatch = value.match(/\[([\w\d]+)[=]"(.*)"\]/);
     if (conditionMatch) {
-      part.value = part.value
+      partOptions.value = partOptions.value
         .substring(0, conditionMatch.index);
 
-      part.condition = {
+      partOptions.condition = {
         type: 'equality',
         property: conditionMatch[1],
         value: conditionMatch[2]
       };
     }
 
-    parts.push(part);
+    parts.push(partOptions);
 
     direct = false;
   }
