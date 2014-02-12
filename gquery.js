@@ -1,487 +1,505 @@
-var Lazy = require('lazy.js');
+(function() {
 
-/**
- * @typedef {object} LocatorPartOptions
- * @property {string} type One of ['id', 'class', 'name']
- * @property {boolean} direct Whether this part represents a direct descendant
- * @property {string} value The id, class name, or name to look for
- */
+  var Lazy = this.Lazy;
 
-/**
- * Wraps an object and provides jQuery-like query capabilities on that object.
- *
- * @example
- * var $ = gQuery([
- *   { 'id': 'foo', attr: 1 },
- *   { 'class': 'bar', attr: 2 },
- *   {
- *     'name': 'baz',
- *     'attr': 3,
- *     'children': [
- *       { 'class': 'bar', attr: 4 }
- *     ]
- *   }
- * ]);
- *
- * $('#foo');             // => collection: [{ id: 'foo', attr: 1 }]
- * $('.bar');             // => collection: [{ 'class': 'bar', attr: 2 }, { 'class': 'bar', attr: 4 }]
- * $('baz').prop('attr'); // => 3
- * $('baz > .bar');       // => collection: [{ 'class': 'bar', attr: 4 }]
- * $('.bar[attr="4"]');   // => collection: [{ 'class': 'bar', attr: 4 }]
- */
-function gQuery(context, options) {
-  var adapter = new Adapter(context || [], options || {});
+  if (!Lazy) {
+    if (typeof require === 'function') {
+      Lazy = require('lazy.js');
+    }
 
-  return function $(selector) {
-    return adapter.find(selector);
-  };
-}
-
-/**
- * A collection of objects wrapped by gQuery.
- *
- * @param {Array.<*>} source The array of objects to include in the collection.
- * @param {Adapter} adapter The adapter to use for {@link #find}, etc.
- * @constructor
- */
-function Collection(source, adapter) {
-  this.source  = source  || [];
-  this.adapter = adapter || new Adapter();
-}
-
-Collection.prototype = new Lazy.ArrayLikeSequence();
-
-Collection.prototype.get = function get(i) {
-  return this.source[i];
-};
-
-Collection.prototype.length = function length() {
-  return this.source.length;
-};
-
-Collection.prototype.inspect = function inspect() {
-  return JSON.stringify(this.value(), null, 2);
-};
-
-/**
- * Either gets or sets the property with the specified name.
- *
- * To *get* the property, only supply the first parameter ('name'). The return
- * value will be retrieved from the first element in the collection.
- *
- * To *set* the property, supply both parameters ('name' and 'value'). The
- * property will be set for every element in the collection.
- *
- * @param {string} name The name of the property to get/set.
- * @param {*} value The value for the property.
- * @returns {Collection} The collection.
- *
- * @example
- * var collection = new gQuery.Collection([
- *   { tag: 1 },
- *   { tag: 2 }
- * ]);
- *
- * collection.prop('tag');    // => 1
- * collection.prop('tag', 3); // => collection: [{ tag: 3 }, { tag: 3 }]
- */
-Collection.prototype.prop = function prop(name, value) {
-  if (arguments.length === 1) {
-    return (this.first() || {})[name];
+    if (!Lazy) {
+      throw 'gQuery requires lazy.js!';
+    }
   }
 
-  this.each(function(e) {
-    e[name] = value;
-  });
+  /**
+   * @typedef {object} LocatorPartOptions
+   * @property {string} type One of ['id', 'class', 'name']
+   * @property {boolean} direct Whether this part represents a direct descendant
+   * @property {string} value The id, class name, or name to look for
+   */
 
-  return this;
-};
+  /**
+   * Wraps an object and provides jQuery-like query capabilities on that object.
+   *
+   * @example
+   * var $ = gQuery([
+   *   { 'id': 'foo', attr: 1 },
+   *   { 'class': 'bar', attr: 2 },
+   *   {
+   *     'name': 'baz',
+   *     'attr': 3,
+   *     'children': [
+   *       { 'class': 'bar', attr: 4 }
+   *     ]
+   *   }
+   * ]);
+   *
+   * $('#foo');             // => collection: [{ id: 'foo', attr: 1 }]
+   * $('.bar');             // => collection: [{ 'class': 'bar', attr: 2 }, { 'class': 'bar', attr: 4 }]
+   * $('baz').prop('attr'); // => 3
+   * $('baz > .bar');       // => collection: [{ 'class': 'bar', attr: 4 }]
+   * $('.bar[attr="4"]');   // => collection: [{ 'class': 'bar', attr: 4 }]
+   */
+  function gQuery(context, options) {
+    var adapter = new Adapter(context || [], options || {});
 
-/**
- * Finds all the matches for the given selector.
- *
- * @param {string} selector A selector like '#foo', '.bar', etc.
- * @returns {Collection} A collection consisting of all the matches.
- *
- * @example
- * var collection = new gQuery.Collection([
- *   {
- *     id: 'foo',
- *     children: [
- *       { 'class': 'bar', tag: 2 }
- *     ],
- *     tag: 1
- *   },
- *   { 'class': 'bar', tag: 3 }
- * ]);
- *
- * collection.find('#foo').prop('tag');  // => 1
- * collection.find('#foo').find('.bar'); // => collection: [{ 'class': 'bar', tag: 2 }]
- */
-Collection.prototype.find = function find(selector) {
-  return new Locator(selector, this.adapter).find(this);
-};
-
-/**
- * The `Adapter` object is responsible for configuring how gQuery traverses a
- * data structure. In particular it provides these overridable methods:
- *
- * - `getId` (for `'#foo'`-style selectors)
- * - `getName` (for `'foo'`-style selectors)
- * - `getClass` (for `'.foo'`-style selectors)
- * - `getChildren` (to understand how to search the entire structure)
- *
- * @param {Object} context The object being wrapped.
- * @param {Object} options Optional overrides for the methods listed above.
- * @constructor
- */
-function Adapter(context, options) {
-  this.context = context || [];
-
-  options || (options = {});
-
-  overrideMethod(this, 'getId', options.id);
-  overrideMethod(this, 'getName', options.name);
-  overrideMethod(this, 'getClass', options.class);
-  overrideMethod(this, 'getChildren', options.children);
-}
-
-/**
- * @private
- * @param {Object} object
- * @param {string} name
- * @param {function(*):*|string} override
- *
- * @example
- * var base = { foo: 'bar' };
- *
- * overrideMethod(base, 'foo', function(x) { return -x; })
- *   .foo(5);
- * // => -5
- *
- * overrideMethod(base, 'foo', 'baz')
- *   .foo({ baz: 'blah' });
- * // => 'blah'
- */
-function overrideMethod(object, name, override) {
-  if (typeof override === 'function') {
-    object[name] = override;
-
-  } else if (typeof override === 'string') {
-    object[name] = function(node) {
-      return node[override];
+    return function $(selector) {
+      return adapter.find(selector);
     };
   }
 
-  return object;
-}
+  /**
+   * A collection of objects wrapped by gQuery.
+   *
+   * @param {Array.<*>} source The array of objects to include in the collection.
+   * @param {Adapter} adapter The adapter to use for {@link #find}, etc.
+   * @constructor
+   */
+  function Collection(source, adapter) {
+    this.source  = source  || [];
+    this.adapter = adapter || new Adapter();
+  }
 
-Adapter.prototype.getId = function getId(node) {
-  return node.id;
-};
+  Collection.prototype = new Lazy.ArrayLikeSequence();
 
-Adapter.prototype.getClass = function getClass(node) {
-  return node.class;
-};
+  Collection.prototype.get = function get(i) {
+    return this.source[i];
+  };
 
-Adapter.prototype.getName = function getName(node) {
-  return node.name;
-};
+  Collection.prototype.length = function length() {
+    return this.source.length;
+  };
 
-Adapter.prototype.getChildren = function getChildren(node) {
-  return node.children || [];
-};
+  Collection.prototype.inspect = function inspect() {
+    return JSON.stringify(this.value(), null, 2);
+  };
 
-Adapter.prototype.find = function find(selector) {
-  return new Locator(selector, this).find(this.context);
-};
-
-Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate) {
-  var adapter = this,
-      matches = [];
-
-  Lazy(nodes).each(function(node) {
-    if (predicate(node)) {
-      matches.push(node);
+  /**
+   * Either gets or sets the property with the specified name.
+   *
+   * To *get* the property, only supply the first parameter ('name'). The return
+   * value will be retrieved from the first element in the collection.
+   *
+   * To *set* the property, supply both parameters ('name' and 'value'). The
+   * property will be set for every element in the collection.
+   *
+   * @param {string} name The name of the property to get/set.
+   * @param {*} value The value for the property.
+   * @returns {Collection} The collection.
+   *
+   * @example
+   * var collection = new gQuery.Collection([
+   *   { tag: 1 },
+   *   { tag: 2 }
+   * ]);
+   *
+   * collection.prop('tag');    // => 1
+   * collection.prop('tag', 3); // => collection: [{ tag: 3 }, { tag: 3 }]
+   */
+  Collection.prototype.prop = function prop(name, value) {
+    if (arguments.length === 1) {
+      return (this.first() || {})[name];
     }
 
-    if (recursive) {
-      matches.push.apply(matches, adapter.findMatches(adapter.getChildren(node), true, predicate));
-    }
-  });
-
-  return matches;
-};
-
-/**
- * The `Locator` object takes a selector and is responsible for applying that
- * selector in order to search a data structure.
- *
- * @param {string} selector A selector like '#foo', '.bar', etc.
- * @param {Adapter} adapter The adapter to use when searching.
- * @constructor
- */
-function Locator(selector, adapter) {
-  this.adapter = adapter || new Adapter();
-
-  this.parts = Lazy(parseSelector(selector || ''))
-    .map(function(part) {
-      return new LocatorPart(adapter, part);
-    })
-    .toArray();
-}
-
-/**
- * @example
- * var fooLocator   = new gQuery.Locator('#foo'),
- *     childLocator = new gQuery.Locator('foo > bar');
- *
- * fooLocator.find([{ id: 'bar' }, { id: 'foo' }]);
- * // => collection: [{ id: 'foo' }]
- *
- * fooLocator.find([
- *   { children: [] },
- *   { children: [{ id: 'bar' }] },
- *   {
- *     children: [
- *       { id: 'foo', attribute: 'blah' },
- *       { id: 'bar', attribute: 'whatever' }
- *     ]
- *   }
- * ]);
- * // => collection: [{ id: 'foo', attribute: 'blah' }]
- *
- * childLocator.find([
- *   {
- *     name: 'foo',
- *     children: [
- *       { name: 'foo', x: 1 },
- *       { name: 'bar', x: 2 },
- *       {
- *         children: [
- *           { name: 'bar', x: 3 }
- *         ]
- *       }
- *     ]
- *   },
- *   {
- *     name: 'bar',
- *     children: [
- *       { name: 'foo', x: 4 }
- *     ]
- *   }
- * ]);
- * // => collection: [{ name: 'bar', x: 2 }]
- */
-Locator.prototype.find = function find(target) {
-  var adapter    = this.adapter,
-      result     = getCollection(target, adapter),
-      finalIndex = this.parts.length - 1;
-
-  Lazy(this.parts).each(function(part, i) {
-    result = adapter.findMatches(result, !part.direct, function(child) {
-      return part.matches(child);
+    this.each(function(e) {
+      e[name] = value;
     });
 
-    if (i != finalIndex) {
-      result = Lazy(result)
-        .map(function(match) {
-          return adapter.getChildren(match);
-        })
-        .flatten()
-        .toArray();
+    return this;
+  };
+
+  /**
+   * Finds all the matches for the given selector.
+   *
+   * @param {string} selector A selector like '#foo', '.bar', etc.
+   * @returns {Collection} A collection consisting of all the matches.
+   *
+   * @example
+   * var collection = new gQuery.Collection([
+   *   {
+   *     id: 'foo',
+   *     children: [
+   *       { 'class': 'bar', tag: 2 }
+   *     ],
+   *     tag: 1
+   *   },
+   *   { 'class': 'bar', tag: 3 }
+   * ]);
+   *
+   * collection.find('#foo').prop('tag');  // => 1
+   * collection.find('#foo').find('.bar'); // => collection: [{ 'class': 'bar', tag: 2 }]
+   */
+  Collection.prototype.find = function find(selector) {
+    return new Locator(selector, this.adapter).find(this);
+  };
+
+  /**
+   * The `Adapter` object is responsible for configuring how gQuery traverses a
+   * data structure. In particular it provides these overridable methods:
+   *
+   * - `getId` (for `'#foo'`-style selectors)
+   * - `getName` (for `'foo'`-style selectors)
+   * - `getClass` (for `'.foo'`-style selectors)
+   * - `getChildren` (to understand how to search the entire structure)
+   *
+   * @param {Object} context The object being wrapped.
+   * @param {Object} options Optional overrides for the methods listed above.
+   * @constructor
+   */
+  function Adapter(context, options) {
+    this.context = context || [];
+
+    options || (options = {});
+
+    overrideMethod(this, 'getId', options.id);
+    overrideMethod(this, 'getName', options.name);
+    overrideMethod(this, 'getClass', options.class);
+    overrideMethod(this, 'getChildren', options.children);
+  }
+
+  /**
+   * @private
+   * @param {Object} object
+   * @param {string} name
+   * @param {function(*):*|string} override
+   *
+   * @example
+   * var base = { foo: 'bar' };
+   *
+   * overrideMethod(base, 'foo', function(x) { return -x; })
+   *   .foo(5);
+   * // => -5
+   *
+   * overrideMethod(base, 'foo', 'baz')
+   *   .foo({ baz: 'blah' });
+   * // => 'blah'
+   */
+  function overrideMethod(object, name, override) {
+    if (typeof override === 'function') {
+      object[name] = override;
+
+    } else if (typeof override === 'string') {
+      object[name] = function(node) {
+        return node[override];
+      };
     }
-  });
 
-  return new Collection(result, adapter);
-};
-
-/**
- * One part of a {@link Locator}.
- *
- * @param {Adapter} adapter
- * @param {LocatorPartOptions} options
- * @constructor
- */
-function LocatorPart(adapter, options) {
-  options || (options = {});
-
-  this.adapter   = adapter;
-  this.source    = options.source;
-  this.type      = options.type || 'name';
-  this.direct    = options.direct || false;
-  this.value     = options.value || '';
-  this.condition = options.condition;
-  this.matches   = this.getPredicate();
-}
-
-LocatorPart.prototype.getPredicate = function getPredicate() {
-  var basePredicate = this.getBasePredicate(),
-      predicate     = basePredicate,
-      condition     = this.condition;
-
-  if (condition) {
-    predicate = this.applyCondition(condition, predicate);
+    return object;
   }
 
-  return predicate;
-};
+  Adapter.prototype.getId = function getId(node) {
+    return node.id;
+  };
 
-LocatorPart.prototype.getBasePredicate = function getBasePredicate() {
-  var adapter = this.adapter,
-      type    = this.type,
-      value   = this.value;
+  Adapter.prototype.getClass = function getClass(node) {
+    return node.class;
+  };
 
-  switch (type) {
-    case 'id':
-      return function(node) {
-        return adapter.getId(node) === value;
-      };
+  Adapter.prototype.getName = function getName(node) {
+    return node.name;
+  };
 
-    case 'class':
-      return function(node) {
-        return adapter.getClass(node) === value;
-      };
+  Adapter.prototype.getChildren = function getChildren(node) {
+    return node.children || [];
+  };
 
-    case 'name':
-      return function(node) {
-        return adapter.getName(node) === value;
-      };
-  }
-};
+  Adapter.prototype.find = function find(selector) {
+    return new Locator(selector, this).find(this.context);
+  };
 
-LocatorPart.prototype.applyCondition = function applyCondition(condition, predicate) {
-  switch (condition.type) {
-    case 'equality':
-      return function(node) {
-        if (!predicate(node)) { return false; }
+  Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate) {
+    var adapter = this,
+        matches = [];
 
-        // TODO: allow for non-string (e.g. numeric) matching as well
-        return String(node[condition.property]) === String(condition.value);
-      };
-
-    default:
-      throw 'Unknown condition type: "' + condition.type + '"! ' +
-        '(from selector: ' + this.source + ')';
-  }
-};
-
-/**
- * @private
- * @param {string} selector
- * @returns {Array.<LocatorPart>}
- *
- * @example
- * parseSelector('foo > bar');
- * // => [
- *   { source: 'foo', type: 'name', direct: false, value: 'foo' },
- *   { source: 'bar', type: 'name', direct: true, value: 'bar' }
- * ]
- *
- * parseSelector('foo > > bar'); // throws
- *
- * parseSelector('#foo .bar baz');
- * // => [
- *   { source: '#foo', type: 'id', direct: false , value: 'foo' },
- *   { source: '.bar', type: 'class', direct: false, value: 'bar' },
- *   { source: 'baz', type: 'name', direct: false, value: 'baz' }
- * ]
- *
- * parseSelector('#foo[bar="baz"]');
- * // => [
- *   {
- *     source: '#foo[bar="baz"]',
- *     type: 'id',
- *     direct: false,
- *     value: 'foo',
- *     condition: {
- *       type: 'equality',
- *       property: 'bar',
- *       value: 'baz'
- *     }
- *   }
- * ]
- */
-function parseSelector(selector) {
-  var matcher = /[#\.]?(?:[\w\d\-]+(?:\[[\w\d]+[=]".*"\])?|>)/g,
-      match,
-      value,
-      parts = [],
-      part,
-      type,
-      direct = false,
-      conditionMatch;
-
-  while (match = matcher.exec(selector)) {
-    value = match[0];
-
-    if (value === '>') {
-      if (direct) {
-        throw 'Encountered redundant "direct descendant" (>) selector at ' +
-          match.index;
+    Lazy(nodes).each(function(node) {
+      if (predicate(node)) {
+        matches.push(node);
       }
 
-      direct = true;
-      continue;
+      if (recursive) {
+        matches.push.apply(matches, adapter.findMatches(adapter.getChildren(node), true, predicate));
+      }
+    });
+
+    return matches;
+  };
+
+  /**
+   * The `Locator` object takes a selector and is responsible for applying that
+   * selector in order to search a data structure.
+   *
+   * @param {string} selector A selector like '#foo', '.bar', etc.
+   * @param {Adapter} adapter The adapter to use when searching.
+   * @constructor
+   */
+  function Locator(selector, adapter) {
+    this.adapter = adapter || new Adapter();
+
+    this.parts = Lazy(parseSelector(selector || ''))
+      .map(function(part) {
+        return new LocatorPart(adapter, part);
+      })
+      .toArray();
+  }
+
+  /**
+   * @example
+   * var fooLocator   = new gQuery.Locator('#foo'),
+   *     childLocator = new gQuery.Locator('foo > bar');
+   *
+   * fooLocator.find([{ id: 'bar' }, { id: 'foo' }]);
+   * // => collection: [{ id: 'foo' }]
+   *
+   * fooLocator.find([
+   *   { children: [] },
+   *   { children: [{ id: 'bar' }] },
+   *   {
+   *     children: [
+   *       { id: 'foo', attribute: 'blah' },
+   *       { id: 'bar', attribute: 'whatever' }
+   *     ]
+   *   }
+   * ]);
+   * // => collection: [{ id: 'foo', attribute: 'blah' }]
+   *
+   * childLocator.find([
+   *   {
+   *     name: 'foo',
+   *     children: [
+   *       { name: 'foo', x: 1 },
+   *       { name: 'bar', x: 2 },
+   *       {
+   *         children: [
+   *           { name: 'bar', x: 3 }
+   *         ]
+   *       }
+   *     ]
+   *   },
+   *   {
+   *     name: 'bar',
+   *     children: [
+   *       { name: 'foo', x: 4 }
+   *     ]
+   *   }
+   * ]);
+   * // => collection: [{ name: 'bar', x: 2 }]
+   */
+  Locator.prototype.find = function find(target) {
+    var adapter    = this.adapter,
+        result     = getCollection(target, adapter),
+        finalIndex = this.parts.length - 1;
+
+    Lazy(this.parts).each(function(part, i) {
+      result = adapter.findMatches(result, !part.direct, function(child) {
+        return part.matches(child);
+      });
+
+      if (i != finalIndex) {
+        result = Lazy(result)
+          .map(function(match) {
+            return adapter.getChildren(match);
+          })
+          .flatten()
+          .toArray();
+      }
+    });
+
+    return new Collection(result, adapter);
+  };
+
+  /**
+   * One part of a {@link Locator}.
+   *
+   * @param {Adapter} adapter
+   * @param {LocatorPartOptions} options
+   * @constructor
+   */
+  function LocatorPart(adapter, options) {
+    options || (options = {});
+
+    this.adapter   = adapter;
+    this.source    = options.source;
+    this.type      = options.type || 'name';
+    this.direct    = options.direct || false;
+    this.value     = options.value || '';
+    this.condition = options.condition;
+    this.matches   = this.getPredicate();
+  }
+
+  LocatorPart.prototype.getPredicate = function getPredicate() {
+    var basePredicate = this.getBasePredicate(),
+        predicate     = basePredicate,
+        condition     = this.condition;
+
+    if (condition) {
+      predicate = this.applyCondition(condition, predicate);
     }
 
-    switch (value.charAt(0)) {
-      case '#':
-        type = 'id';
-        value = value.substring(1);
-        break;
+    return predicate;
+  };
 
-      case '.':
-        type = 'class';
-        value = value.substring(1);
-        break;
+  LocatorPart.prototype.getBasePredicate = function getBasePredicate() {
+    var adapter = this.adapter,
+        type    = this.type,
+        value   = this.value;
+
+    switch (type) {
+      case 'id':
+        return function(node) {
+          return adapter.getId(node) === value;
+        };
+
+      case 'class':
+        return function(node) {
+          return adapter.getClass(node) === value;
+        };
+
+      case 'name':
+        return function(node) {
+          return adapter.getName(node) === value;
+        };
+    }
+  };
+
+  LocatorPart.prototype.applyCondition = function applyCondition(condition, predicate) {
+    switch (condition.type) {
+      case 'equality':
+        return function(node) {
+          if (!predicate(node)) { return false; }
+
+          // TODO: allow for non-string (e.g. numeric) matching as well
+          return String(node[condition.property]) === String(condition.value);
+        };
 
       default:
-        type = 'name';
-        break;
+        throw 'Unknown condition type: "' + condition.type + '"! ' +
+          '(from selector: ' + this.source + ')';
     }
+  };
 
-    partOptions = {
-      source: match[0],
-      type: type,
-      direct: direct,
-      value: value
-    };
+  /**
+   * @private
+   * @param {string} selector
+   * @returns {Array.<LocatorPart>}
+   *
+   * @example
+   * parseSelector('foo > bar');
+   * // => [
+   *   { source: 'foo', type: 'name', direct: false, value: 'foo' },
+   *   { source: 'bar', type: 'name', direct: true, value: 'bar' }
+   * ]
+   *
+   * parseSelector('foo > > bar'); // throws
+   *
+   * parseSelector('#foo .bar baz');
+   * // => [
+   *   { source: '#foo', type: 'id', direct: false , value: 'foo' },
+   *   { source: '.bar', type: 'class', direct: false, value: 'bar' },
+   *   { source: 'baz', type: 'name', direct: false, value: 'baz' }
+   * ]
+   *
+   * parseSelector('#foo[bar="baz"]');
+   * // => [
+   *   {
+   *     source: '#foo[bar="baz"]',
+   *     type: 'id',
+   *     direct: false,
+   *     value: 'foo',
+   *     condition: {
+   *       type: 'equality',
+   *       property: 'bar',
+   *       value: 'baz'
+   *     }
+   *   }
+   * ]
+   */
+  function parseSelector(selector) {
+    var matcher = /[#\.]?(?:[\w\d\-]+(?:\[[\w\d]+[=]".*"\])?|>)/g,
+        match,
+        value,
+        parts = [],
+        part,
+        type,
+        direct = false,
+        conditionMatch;
 
-    conditionMatch = value.match(/\[([\w\d]+)[=]"(.*)"\]/);
-    if (conditionMatch) {
-      partOptions.value = partOptions.value
-        .substring(0, conditionMatch.index);
+    while (match = matcher.exec(selector)) {
+      value = match[0];
 
-      partOptions.condition = {
-        type: 'equality',
-        property: conditionMatch[1],
-        value: conditionMatch[2]
+      if (value === '>') {
+        if (direct) {
+          throw 'Encountered redundant "direct descendant" (>) selector at ' +
+            match.index;
+        }
+
+        direct = true;
+        continue;
+      }
+
+      switch (value.charAt(0)) {
+        case '#':
+          type = 'id';
+          value = value.substring(1);
+          break;
+
+        case '.':
+          type = 'class';
+          value = value.substring(1);
+          break;
+
+        default:
+          type = 'name';
+          break;
+      }
+
+      partOptions = {
+        source: match[0],
+        type: type,
+        direct: direct,
+        value: value
       };
+
+      conditionMatch = value.match(/\[([\w\d]+)[=]"(.*)"\]/);
+      if (conditionMatch) {
+        partOptions.value = partOptions.value
+          .substring(0, conditionMatch.index);
+
+        partOptions.condition = {
+          type: 'equality',
+          property: conditionMatch[1],
+          value: conditionMatch[2]
+        };
+      }
+
+      parts.push(partOptions);
+
+      direct = false;
     }
 
-    parts.push(partOptions);
-
-    direct = false;
+    return parts;
   }
 
-  return parts;
-}
+  function getCollection(source, adapter) {
+    if (source instanceof Collection) {
+      return source;
+    }
 
-function getCollection(source, adapter) {
-  if (source instanceof Collection) {
-    return source;
+    if (!(source instanceof Array)) {
+      source = [source];
+    }
+
+    return new Collection(source, adapter);
   }
 
-  if (!(source instanceof Array)) {
-    source = [source];
+  gQuery.Adapter    = Adapter;
+  gQuery.Collection = Collection;
+  gQuery.Locator    = Locator;
+
+  if (typeof module === 'object' && module && module.exports) {
+    module.exports = gQuery;
+  } else {
+    this.gQuery = gQuery;
   }
 
-  return new Collection(source, adapter);
-}
-
-gQuery.Adapter    = Adapter;
-gQuery.Collection = Collection;
-gQuery.Locator    = Locator;
-
-module.exports = gQuery;
+}).call(this);
