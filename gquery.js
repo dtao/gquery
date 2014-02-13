@@ -59,20 +59,46 @@
   function Collection(source, adapter) {
     this.source  = source  || [];
     this.adapter = adapter || new Adapter();
+    this.nodes   = this.createNodes();
   }
 
   Collection.prototype = new Lazy.ArrayLikeSequence();
 
   Collection.prototype.get = function get(i) {
-    return this.source[i];
+    return this.nodes[i];
   };
 
   Collection.prototype.length = function length() {
     return this.source.length;
   };
 
+  Collection.prototype.createNodes = function createNodes() {
+    var collection = this,
+        adapter = this.adapter;
+
+    return Lazy(this.source)
+      .map(function(object) {
+        if (object instanceof Node) {
+          return object;
+        }
+
+        return new Node(object, collection, adapter);
+      })
+      .toArray();
+  };
+
   Collection.prototype.inspect = function inspect() {
-    return JSON.stringify(this.value(), null, 2);
+    return JSON.stringify(this.value(), function(key, value) {
+      if (key === 'parent' || key === 'adapter') {
+        return undefined;
+      }
+
+      if (value instanceof Node) {
+        return value.unwrap();
+      }
+
+      return value;
+    }, 2);
   };
 
   /**
@@ -99,11 +125,13 @@
    */
   Collection.prototype.prop = function prop(name, value) {
     if (arguments.length === 1) {
-      return (this.first() || {})[name];
+      var first = this.first();
+      if (first) { return first.get(name); }
+      return undefined;
     }
 
     this.each(function(e) {
-      e[name] = value;
+      e.set(name, value);
     });
 
     return this;
@@ -132,6 +160,79 @@
    */
   Collection.prototype.find = function find(selector) {
     return new Locator(selector, this.adapter).find(this);
+  };
+
+  /**
+   * A single object wrapped by gQuery. This guy has a reference to his parent,
+   * which will be necessary for `appendTo`, `insertBefore`, etc.
+   *
+   * @param {*} object The object to wrap.
+   * @param {?Node} parent The parent node (can be `null`).
+   * @param {Adapter} adapter Always need the freakin' adapter.
+   * @constructor
+   */
+  function Node(object, parent, adapter) {
+    if (!(this instanceof Node)) {
+      return new Node(object, parent, adapter);
+    }
+
+    this.object   = object;
+    this.parent   = parent;
+    this.adapter  = adapter;
+    this.children = this.createChildren();
+  }
+
+  Object.defineProperty(Node.prototype, 'id', {
+    get: function id() {
+      return this.adapter.getId(this.object);
+    }
+  });
+
+  Object.defineProperty(Node.prototype, 'name', {
+    get: function name() {
+      return this.adapter.getName(this.object);
+    }
+  });
+
+  Object.defineProperty(Node.prototype, 'className', {
+    get: function className() {
+      return this.adapter.getClass(this.object);
+    }
+  });
+
+  Node.prototype.get = function get(property) {
+    return (this.object && this.object[property]) || undefined;
+  };
+
+  Node.prototype.set = function set(property, value) {
+    var object = this.object;
+
+    if (!object) {
+      throw 'Cannot set a property of ' + object + '!';
+    }
+
+    var type = typeof object;
+    if (type !== 'object' && type !== 'function') {
+      throw 'Cannot set a property of a ' + type + '!';
+    }
+
+    object[property] = value;
+    return this;
+  };
+
+  Node.prototype.createChildren = function createChildren() {
+    var self = this,
+        adapter = this.adapter;
+
+    return Lazy(adapter.getChildren(this.object))
+      .map(function(object) {
+        return new Node(object, self, adapter);
+      })
+      .toArray();
+  };
+
+  Node.prototype.unwrap = function unwrap() {
+    return this.object;
   };
 
   /**
@@ -218,7 +319,7 @@
       }
 
       if (recursive) {
-        matches.push.apply(matches, adapter.findMatches(adapter.getChildren(node), true, predicate));
+        matches.push.apply(matches, adapter.findMatches(node.children, true, predicate));
       }
     });
 
@@ -298,7 +399,7 @@
       if (i != finalIndex) {
         result = Lazy(result)
           .map(function(match) {
-            return adapter.getChildren(match);
+            return match.children;
           })
           .flatten()
           .toArray();
@@ -347,17 +448,17 @@
     switch (type) {
       case 'id':
         return function(node) {
-          return adapter.getId(node) === value;
+          return node.id === value;
         };
 
       case 'class':
         return function(node) {
-          return adapter.getClass(node) === value;
+          return node.className === value;
         };
 
       case 'name':
         return function(node) {
-          return adapter.getName(node) === value;
+          return node.name === value;
         };
     }
   };
@@ -369,7 +470,7 @@
           if (!predicate(node)) { return false; }
 
           // TODO: allow for non-string (e.g. numeric) matching as well
-          return String(node[condition.property]) === String(condition.value);
+          return String(node.get(condition.property)) === String(condition.value);
         };
 
       default:
@@ -494,6 +595,7 @@
 
   gQuery.Adapter    = Adapter;
   gQuery.Collection = Collection;
+  gQuery.Node       = Node;
   gQuery.Locator    = Locator;
 
   if (typeof module === 'object' && module && module.exports) {
