@@ -150,7 +150,7 @@
       .toArray();
   };
 
-  Collection.prototype.inspect = function inspect() {
+  Collection.prototype.inspect = function inspect(pretty) {
     return JSON.stringify(this.value(), function(key, value) {
       if (key === 'parent' || key === 'adapter') {
         return undefined;
@@ -161,7 +161,7 @@
       }
 
       return value;
-    }, 2);
+    }, pretty ? 2 : undefined);
   };
 
   /**
