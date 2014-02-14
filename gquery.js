@@ -223,6 +223,43 @@
   };
 
   /**
+   * Inserts all nodes in this collection before the specified node.
+   * @param {Collection} sibling
+   * @returns {Collection}
+   *
+   * @example
+   * var array = [
+   *   { name: 'foo', children: [1, 2, 3] },
+   *   { name: 'bar', children: [4, 5, 6] }
+   * ];
+   *
+   * var $ = gQuery(array, {
+   *   id: function(x) { return x; },
+   *   class: function(x) { return x % 2 === 0 ? 'even' : 'odd'; }
+   * });
+   *
+   * $('.even').insertBefore($('#1'));
+   * array[0].children;    // => [2, 4, 6, 1, 3]
+   * array[1].children;    // => [5]
+   * $('foo').children();  // => collection: [2, 4, 6, 1, 3]
+   * $('bar').children();  // => collection: [5]
+   * $('#4').get(0).index; // => 1
+   * $('#3').get(0).index; // => 4
+   * $('#1').get(0).index; // => 3
+   * $('#5').get(0).index; // => 0
+   */
+  Collection.prototype.insertBefore = function insertBefore(sibling) {
+    // TODO: What should actually happen here?
+    var siblingNode = sibling.first();
+
+    this.each(function(node) {
+      node.insertBefore(siblingNode);
+    });
+
+    return this;
+  };
+
+  /**
    * Inserts all nodes in this collection after the specified node.
    *
    * @param {Collection} sibling
@@ -444,6 +481,13 @@
    */
   Node.prototype.appendTo = function(parent) {
     parent.append(this);
+  };
+
+  /**
+   * Inserts this node before the specified node.
+   */
+  Node.prototype.insertBefore = function insertBefore(sibling) {
+    sibling.parent.insert(sibling.index, this);
   };
 
   /**
