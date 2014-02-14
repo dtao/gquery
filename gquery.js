@@ -189,6 +189,40 @@
   };
 
   /**
+   * Prepends all nodes in this collection to the specified parent.
+   *
+   * @param {Collection} parent
+   * @returns {Collection}
+   *
+   * @example
+   * var array = [
+   *   { name: 'foo', children: [1, 2, 3] },
+   *   { name: 'bar', children: [4, 5, 6] }
+   * ];
+   *
+   * var $ = gQuery(array, {
+   *   id: function(x) { return x; },
+   *   class: function(x) { return x % 2 === 1 ? 'odd' : undefined }
+   * });
+   *
+   * $('.odd').prependTo($('bar'));
+   * array[0].children;    // => [2]
+   * array[1].children;    // => [1, 3, 5, 4, 6]
+   * $('foo').children();  // => collection: [2]
+   * $('bar').children();  // => collection: [1, 3, 5, 4, 6]
+   */
+  Collection.prototype.prependTo = function prependTo(parent) {
+    // TODO: What should actually happen here?
+    var parentNode = parent.first();
+
+    this.each(function(node, i) {
+      parentNode.insert(i, node);
+    });
+
+    return this;
+  };
+
+  /**
    * Appends all nodes in this collection to the specified parent.
    *
    * @param {Collection} parent
@@ -235,7 +269,7 @@
    *
    * var $ = gQuery(array, {
    *   id: function(x) { return x; },
-   *   class: function(x) { return x % 2 === 0 ? 'even' : 'odd'; }
+   *   class: function(x) { return x % 2 === 0 ? 'even' : undefined; }
    * });
    *
    * $('.even').insertBefore($('#1'));
@@ -461,6 +495,13 @@
   };
 
   /**
+   * Prepends the specified child node to this node's children.
+   */
+  Node.prototype.prepend = function prepend(child) {
+    this.insert(0, child);
+  };
+
+  /**
    * Appends the specified child node to this node's children.
    */
   Node.prototype.append = function append(child) {
@@ -474,6 +515,13 @@
   Node.prototype.insert = function insert(index, child) {
     child.remove();
     this.children.insert(index, child);
+  };
+
+  /**
+   * Moves this node to the beginning of the specified parent node's children.
+   */
+  Node.prototype.prependTo = function prependTo(parent) {
+    parent.prepend(this);
   };
 
   /**
