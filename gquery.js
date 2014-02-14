@@ -42,10 +42,11 @@
    * $('.bar[attr="4"]');   // => collection: [{ 'class': 'bar', attr: 4 }]
    */
   function gQuery(context, options) {
-    var adapter = new Adapter(context || [], options || {});
+    var adapter    = new Adapter(options),
+        collection = new Collection(context, adapter);
 
     return function $(selector) {
-      return adapter.find(selector);
+      return collection.find(selector);
     };
   }
 
@@ -244,13 +245,10 @@
    * - `getClass` (for `'.foo'`-style selectors)
    * - `getChildren` (to understand how to search the entire structure)
    *
-   * @param {Object} context The object being wrapped.
    * @param {Object} options Optional overrides for the methods listed above.
    * @constructor
    */
-  function Adapter(context, options) {
-    this.context = context || [];
-
+  function Adapter(options) {
     options || (options = {});
 
     overrideMethod(this, 'getId', options.id);
@@ -303,10 +301,6 @@
 
   Adapter.prototype.getChildren = function getChildren(node) {
     return node.children || [];
-  };
-
-  Adapter.prototype.find = function find(selector) {
-    return new Locator(selector, this).find(this.context);
   };
 
   Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate) {
