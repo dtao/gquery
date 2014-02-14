@@ -82,6 +82,21 @@
 
   Collection.prototype = Object.create(Lazy.ArrayLikeSequence.prototype);
 
+  Collection.prototype.root = function root() {
+    var parent = this.parent;
+
+    // TODO: This is shaky, as it won't work for selections of zero elements.
+    if (!parent) {
+      parent = this.first().parent;
+    }
+
+    while (parent.parent) {
+      parent = parent.parent;
+    }
+
+    return parent;
+  };
+
   Collection.prototype.get = function get(i) {
     return this.nodes[i];
   };
@@ -205,7 +220,7 @@
    *   class: function(x) { return x % 2 === 1 ? 'odd' : undefined }
    * });
    *
-   * $('.odd').prependTo($('bar'));
+   * $('.odd').prependTo('bar');
    * array[0].children;    // => [2]
    * array[1].children;    // => [1, 3, 5, 4, 6]
    * $('foo').children();  // => collection: [2]
@@ -213,7 +228,7 @@
    */
   Collection.prototype.prependTo = function prependTo(parent) {
     // TODO: What should actually happen here?
-    var parentNode = parent.first();
+    var parentNode = this.getNode(parent);
 
     this.each(function(node, i) {
       parentNode.insert(i, node);
@@ -238,7 +253,7 @@
    *   id: function(x) { return x; }
    * });
    *
-   * $('#5').appendTo($('foo'));
+   * $('#5').appendTo('foo');
    * array[0].children;    // => [1, 2, 3, 5]
    * array[1].children;    // => [4, 6]
    * $('foo').children();  // => collection: [1, 2, 3, 5]
@@ -247,7 +262,7 @@
    */
   Collection.prototype.appendTo = function appendTo(parent) {
     // TODO: What should actually happen here?
-    var parentNode = parent.first();
+    var parentNode = this.getNode(parent);
 
     this.each(function(node) {
       parentNode.append(node);
@@ -272,7 +287,7 @@
    *   class: function(x) { return x % 2 === 0 ? 'even' : undefined; }
    * });
    *
-   * $('.even').insertBefore($('#1'));
+   * $('.even').insertBefore('#1');
    * array[0].children;    // => [2, 4, 6, 1, 3]
    * array[1].children;    // => [5]
    * $('foo').children();  // => collection: [2, 4, 6, 1, 3]
@@ -284,7 +299,7 @@
    */
   Collection.prototype.insertBefore = function insertBefore(sibling) {
     // TODO: What should actually happen here?
-    var siblingNode = sibling.first();
+    var siblingNode = this.getNode(sibling);
 
     this.each(function(node) {
       node.insertBefore(siblingNode);
@@ -309,7 +324,7 @@
    *   id: function(x) { return x; }
    * });
    *
-   * $('#4').insertAfter($('#2'));
+   * $('#4').insertAfter('#2');
    * array[0].children;    // => [1, 2, 4, 3]
    * array[1].children;    // => [5, 6]
    * $('foo').children();  // => collection: [1, 2, 4, 3]
@@ -320,7 +335,7 @@
    */
   Collection.prototype.insertAfter = function insertAfter(sibling) {
     // TODO: What should actually happen here?
-    var siblingNode = sibling.first();
+    var siblingNode = this.getNode(sibling);
 
     this.each(function(node) {
       node.insertAfter(siblingNode);
@@ -398,6 +413,18 @@
     return new Locator(selector, this.adapter).find(this);
   };
 
+  Collection.prototype.getNode = function getNode(node) {
+    if (typeof node === 'string') {
+      node = this.root().find(node);
+    }
+
+    if (node instanceof Collection) {
+      node = node.first();
+    }
+
+    return node;
+  }
+
   /**
    * A selection of nodes (the result of a query). Basically like a
    * {@link gQuery.Collection} except that the nodes may come from many parents.
@@ -413,6 +440,9 @@
   // TODO: should Selection really inherit from Collection? Right now I'm really
   // just doing this for code-sharing convenience. It might be a poor design
   // decision.
+  // TODO: the more I think about it, I think the inheritance here should be
+  // reversed! Collection should inherit from Selection, not the other way
+  // around.
   Selection.prototype = Object.create(Collection.prototype);
 
   /**
