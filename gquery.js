@@ -306,7 +306,7 @@
     this.object   = object;
     this.adapter  = adapter;
     this.parent   = parent;
-    this.index    = index || -1;
+    this.index    = index;
     this.children = this.createChildren();
   }
 
