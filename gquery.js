@@ -527,7 +527,7 @@
   /**
    * Moves this node to the end of the specified parent node's children.
    */
-  Node.prototype.appendTo = function(parent) {
+  Node.prototype.appendTo = function appendTo(parent) {
     parent.append(this);
   };
 
