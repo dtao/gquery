@@ -124,10 +124,12 @@
     // Update wrapper nodes
     var node = this.nodes[index];
     this.nodes.splice(index, 1);
-    this.slice(index).each(function(node) {
-      --node.index;
+    this.slice(index).each(function(childNode) {
+      --childNode.index;
     });
-    node.index = -1;
+    if (node) {
+      node.index = -1;
+    }
 
     return this;
   };
