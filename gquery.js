@@ -90,18 +90,45 @@
     return this.nodes.length;
   };
 
+  Collection.prototype.add = function add(node) {
+    // Update source object
+    this.adapter.appendChild(this.parent.object, node.object);
+
+    // Update wrapper nodes
+    this.nodes.push(node);
+    node.parent = this.parent;
+    node.index = this.nodes.length - 1;
+
+    return this;
+  };
+
+  Collection.prototype.removeAt = function removeAt(index) {
+    // Update source object
+    this.adapter.removeChild(this.parent.object, index);
+
+    // Update wrapper nodes
+    var node = this.nodes[index];
+    this.nodes.splice(index, 1);
+    this.slice(index).each(function(node) {
+      --node.index;
+    });
+    node.index = -1;
+
+    return this;
+  };
+
   Collection.prototype.createNodes = function createNodes(source) {
     var collection = this,
         adapter = this.adapter,
         parent = this.parent;
 
     return Lazy(source)
-      .map(function(object) {
+      .map(function(object, index) {
         if (object instanceof Node) {
           throw 'A Collection should not wrap existing nodes!';
         }
 
-        return new Node(object, adapter, parent);
+        return new Node(object, adapter, parent, index);
       })
       .toArray();
   };
@@ -118,6 +145,70 @@
 
       return value;
     }, 2);
+  };
+
+  /**
+   * Removes all nodes in this collection from their parents.
+   *
+   * @returns {Collection}
+   *
+   * @example
+   * var array = [{ name: 'root', children: [1, 2, 3] }];
+   *
+   * var $ = gQuery(array, {
+   *   id: function(x) { return x; }
+   * });
+   *
+   * $('#2').remove();
+   * array[0].children;    // => [1, 3]
+   * $('root').children(); // => collection: [1, 3]
+   */
+  Collection.prototype.remove = function remove() {
+    this.each(function(node) {
+      node.remove();
+    });
+
+    return this;
+  };
+
+  /**
+   * Appends all nodes in this collection to the specified parent.
+   *
+   * @returns {Collection}
+   *
+   * @example
+   * var array = [
+   *   { name: 'foo', children: [1, 2, 3] },
+   *   { name: 'bar', children: [4, 5, 6] }
+   * ];
+   *
+   * var $ = gQuery(array, {
+   *   id: function(x) { return x; }
+   * });
+   *
+   * $('#5').appendTo($('foo'));
+   * array[0].children;    // => [1, 2, 3, 5]
+   * array[1].children;    // => [4, 6]
+   * $('foo').children();  // => collection: [1, 2, 3, 5]
+   * $('bar').children();  // => collection: [4, 6]
+   * $('#5').get(0).index; // => 3
+   */
+  Collection.prototype.appendTo = function appendTo(parent) {
+    // TODO: What should actually happen here?
+    var parentNode = parent.first();
+
+    this.each(function(node) {
+      node.appendTo(parentNode);
+    });
+
+    return this;
+  };
+
+  /**
+   * Gets all the children of all the nodes in the collection.
+   */
+  Collection.prototype.children = function children() {
+    return this.map('children').flatten();
   };
 
   /**
@@ -207,14 +298,15 @@
    * @param {?Node} parent The parent node (can be `null`).
    * @constructor
    */
-  function Node(object, adapter, parent) {
+  function Node(object, adapter, parent, index) {
     if (!(this instanceof Node)) {
-      return new Node(object, adapter, parent);
+      return new Node(object, adapter, parent, index);
     }
 
     this.object   = object;
-    this.parent   = parent;
     this.adapter  = adapter;
+    this.parent   = parent;
+    this.index    = index || -1;
     this.children = this.createChildren();
   }
 
@@ -265,6 +357,30 @@
         adapter = this.adapter;
 
     return new Collection(adapter.getChildren(this.object), adapter, this);
+  };
+
+  /**
+   * Removes this node from its parent.
+   */
+  Node.prototype.remove = function remove() {
+    if (this.parent) {
+      this.parent.children.removeAt(this.index);
+    }
+  };
+
+  /**
+   * Appends the specified child node to this node's children.
+   */
+  Node.prototype.append = function append(child) {
+    child.remove();
+    this.children.add(child);
+  };
+
+  /**
+   * Moves this node to the end of the specified parent node's children.
+   */
+  Node.prototype.appendTo = function(parent) {
+    parent.append(this);
   };
 
   Node.prototype.unwrap = function unwrap() {
@@ -493,17 +609,17 @@
     switch (type) {
       case 'id':
         return function(node) {
-          return node.id === value;
+          return String(node.id) === value;
         };
 
       case 'class':
         return function(node) {
-          return node.className === value;
+          return String(node.className) === value;
         };
 
       case 'name':
         return function(node) {
-          return node.name === value;
+          return String(node.name) === value;
         };
     }
   };
@@ -640,6 +756,7 @@
 
   gQuery.Adapter    = Adapter;
   gQuery.Collection = Collection;
+  gQuery.Selection  = Selection;
   gQuery.Node       = Node;
   gQuery.Locator    = Locator;
 
