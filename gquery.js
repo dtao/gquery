@@ -42,48 +42,66 @@
    * $('.bar[attr="4"]');   // => collection: [{ 'class': 'bar', attr: 4 }]
    */
   function gQuery(context, options) {
-    var adapter    = new Adapter(options),
-        collection = new Collection(context, adapter);
+    var adapter = new Adapter(options),
+        root    = wrapContext(context, adapter);
 
     return function $(selector) {
-      return collection.find(selector);
+      return root.find(selector);
     };
+  }
+
+  function wrapContext(context, adapter) {
+    var object = context instanceof Array ? {} : context,
+        node   = new Node(object, adapter);
+
+    if (context instanceof Array) {
+      node.children = new Collection(context, adapter, node);
+    }
+
+    return node;
   }
 
   /**
    * A collection of objects wrapped by gQuery.
    *
+   * A `Collection` belongs to a parent node, as opposed to a
+   * {@link gQuery.Selection}, which is the result of a query and may consist of
+   * nodes from many parents.
+   *
    * @param {Array.<*>} source The array of objects to include in the collection.
    * @param {Adapter} adapter The adapter to use for {@link #find}, etc.
+   * @param {Node} parent The parent {@link gQuery.Node} this collection
+   *     belongs to.
    * @constructor
    */
-  function Collection(source, adapter) {
-    this.source  = source  || [];
+  function Collection(source, adapter, parent) {
     this.adapter = adapter || new Adapter();
-    this.nodes   = this.createNodes();
+    this.parent  = parent;
+    this.nodes   = this.createNodes(source || []);
   }
 
-  Collection.prototype = new Lazy.ArrayLikeSequence();
+  Collection.prototype = Object.create(Lazy.ArrayLikeSequence.prototype);
 
   Collection.prototype.get = function get(i) {
     return this.nodes[i];
   };
 
   Collection.prototype.length = function length() {
-    return this.source.length;
+    return this.nodes.length;
   };
 
-  Collection.prototype.createNodes = function createNodes() {
+  Collection.prototype.createNodes = function createNodes(source) {
     var collection = this,
-        adapter = this.adapter;
+        adapter = this.adapter,
+        parent = this.parent;
 
-    return Lazy(this.source)
+    return Lazy(source)
       .map(function(object) {
         if (object instanceof Node) {
-          return object;
+          throw 'A Collection should not wrap existing nodes!';
         }
 
-        return new Node(object, collection, adapter);
+        return new Node(object, adapter, parent);
       })
       .toArray();
   };
@@ -164,17 +182,34 @@
   };
 
   /**
+   * A selection of nodes (the result of a query). Basically like a
+   * {@link gQuery.Collection} except that the nodes may come from many parents.
+   *
+   * @param {Array.<Node>} nodes
+   * @param {Adapter} adapter
+   */
+  function Selection(nodes, adapter) {
+    this.nodes = nodes;
+    this.adapter = adapter;
+  }
+
+  // TODO: should Selection really inherit from Collection? Right now I'm really
+  // just doing this for code-sharing convenience. It might be a poor design
+  // decision.
+  Selection.prototype = Object.create(Collection.prototype);
+
+  /**
    * A single object wrapped by gQuery. This guy has a reference to his parent,
    * which will be necessary for `appendTo`, `insertBefore`, etc.
    *
    * @param {*} object The object to wrap.
-   * @param {?Node} parent The parent node (can be `null`).
    * @param {Adapter} adapter Always need the freakin' adapter.
+   * @param {?Node} parent The parent node (can be `null`).
    * @constructor
    */
-  function Node(object, parent, adapter) {
+  function Node(object, adapter, parent) {
     if (!(this instanceof Node)) {
-      return new Node(object, parent, adapter);
+      return new Node(object, adapter, parent);
     }
 
     this.object   = object;
@@ -201,6 +236,10 @@
     }
   });
 
+  Node.prototype.find = function find(selector) {
+    return this.children.find(selector);
+  };
+
   Node.prototype.get = function get(property) {
     return (this.object && this.object[property]) || undefined;
   };
@@ -225,11 +264,7 @@
     var self = this,
         adapter = this.adapter;
 
-    return Lazy(adapter.getChildren(this.object))
-      .map(function(object) {
-        return new Node(object, self, adapter);
-      })
-      .toArray();
+    return new Collection(adapter.getChildren(this.object), adapter, this);
   };
 
   Node.prototype.unwrap = function unwrap() {
@@ -251,10 +286,17 @@
   function Adapter(options) {
     options || (options = {});
 
+    // TODO: Replace these one day w/ some sort of custom 'selectors' array
+    // to allow users to define their own selectors like '!foo' and '~bar' and
+    // whatnot.
     overrideMethod(this, 'getId', options.id);
     overrideMethod(this, 'getName', options.name);
     overrideMethod(this, 'getClass', options.class);
     overrideMethod(this, 'getChildren', options.children);
+
+    // Allow these to be overridden in case some special type of collection
+    // is used?
+    overrideMethod(this, 'appendChild', options.appendChild);
   }
 
   /**
@@ -303,9 +345,18 @@
     return node.children || [];
   };
 
-  Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate) {
-    var adapter = this,
-        matches = [];
+  Adapter.prototype.appendChild = function appendChild(node, child) {
+    this.getChildren(node).push(child);
+  };
+
+  Adapter.prototype.removeChild = function removeChild(node, childIndex) {
+    this.getChildren(node).splice(childIndex, 1);
+  };
+
+  Adapter.prototype.findMatches = function findMatches(nodes, recursive, predicate, matches) {
+    matches || (matches = []);
+
+    var adapter = this;
 
     Lazy(nodes).each(function(node) {
       if (predicate(node)) {
@@ -313,7 +364,7 @@
       }
 
       if (recursive) {
-        matches.push.apply(matches, adapter.findMatches(node.children, true, predicate));
+        adapter.findMatches(node.children, true, predicate, matches);
       }
     });
 
@@ -400,7 +451,7 @@
       }
     });
 
-    return new Collection(result, adapter);
+    return new Selection(result, adapter);
   };
 
   /**
@@ -584,7 +635,7 @@
       source = [source];
     }
 
-    return new Collection(source, adapter);
+    return new Selection(source, adapter);
   }
 
   gQuery.Adapter    = Adapter;
