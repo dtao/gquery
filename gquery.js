@@ -250,7 +250,7 @@
     var parentNode = parent.first();
 
     this.each(function(node) {
-      node.appendTo(parentNode);
+      parentNode.append(node);
     });
 
     return this;
@@ -495,13 +495,6 @@
   };
 
   /**
-   * Prepends the specified child node to this node's children.
-   */
-  Node.prototype.prepend = function prepend(child) {
-    this.insert(0, child);
-  };
-
-  /**
    * Appends the specified child node to this node's children.
    */
   Node.prototype.append = function append(child) {
@@ -515,20 +508,6 @@
   Node.prototype.insert = function insert(index, child) {
     child.remove();
     this.children.insert(index, child);
-  };
-
-  /**
-   * Moves this node to the beginning of the specified parent node's children.
-   */
-  Node.prototype.prependTo = function prependTo(parent) {
-    parent.prepend(this);
-  };
-
-  /**
-   * Moves this node to the end of the specified parent node's children.
-   */
-  Node.prototype.appendTo = function appendTo(parent) {
-    parent.append(this);
   };
 
   /**
