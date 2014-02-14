@@ -102,6 +102,21 @@
     return this;
   };
 
+  Collection.prototype.insert = function insert(index, node) {
+    // Update source object
+    this.adapter.insertChild(this.parent.object, index, node.object);
+
+    // Update wrapper nodes
+    this.nodes.splice(index, 0, node);
+    node.parent = this.parent;
+    node.index = index;
+    this.slice(index + 1).each(function(childNode) {
+      ++childNode.index;
+    });
+
+    return this;
+  };
+
   Collection.prototype.removeAt = function removeAt(index) {
     // Update source object
     this.adapter.removeChild(this.parent.object, index);
@@ -174,6 +189,7 @@
   /**
    * Appends all nodes in this collection to the specified parent.
    *
+   * @param {Collection} parent
    * @returns {Collection}
    *
    * @example
@@ -199,6 +215,43 @@
 
     this.each(function(node) {
       node.appendTo(parentNode);
+    });
+
+    return this;
+  };
+
+  /**
+   * Inserts all nodes in this collection after the specified node.
+   *
+   * @param {Collection} sibling
+   * @returns {Collection}
+   *
+   * @example
+   * var array = [
+   *   { name: 'foo', children: [1, 2, 3] },
+   *   { name: 'bar', children: [4, 5, 6] }
+   * ];
+   *
+   * var $ = gQuery(array, {
+   *   id: function(x) { return x; }
+   * });
+   *
+   * $('#4').insertAfter($('#2'));
+   * array[0].children;    // => [1, 2, 4, 3]
+   * array[1].children;    // => [5, 6]
+   * $('foo').children();  // => collection: [1, 2, 4, 3]
+   * $('bar').children();  // => collection: [5, 6]
+   * $('#4').get(0).index; // => 2
+   * $('#3').get(0).index; // => 3
+   * $('#5').get(0).index; // => 0
+   */
+  Collection.prototype.insertAfter = function insertAfter(sibling) {
+    // TODO: What should actually happen here?
+    var siblingNode = sibling.first();
+
+    this.each(function(node) {
+      node.insertAfter(siblingNode);
+      siblingNode = node;
     });
 
     return this;
@@ -377,10 +430,25 @@
   };
 
   /**
+   * Inserts the specified child node into this node's children.
+   */
+  Node.prototype.insert = function insert(index, child) {
+    child.remove();
+    this.children.insert(index, child);
+  };
+
+  /**
    * Moves this node to the end of the specified parent node's children.
    */
   Node.prototype.appendTo = function(parent) {
     parent.append(this);
+  };
+
+  /**
+   * Inserts this node after the specified node.
+   */
+  Node.prototype.insertAfter = function insertAfter(sibling) {
+    sibling.parent.insert(sibling.index + 1, this);
   };
 
   Node.prototype.unwrap = function unwrap() {
@@ -463,6 +531,10 @@
 
   Adapter.prototype.appendChild = function appendChild(node, child) {
     this.getChildren(node).push(child);
+  };
+
+  Adapter.prototype.insertChild = function insertChild(node, index, child) {
+    this.getChildren(node).splice(index, 0, child);
   };
 
   Adapter.prototype.removeChild = function removeChild(node, childIndex) {
